@@ -3,8 +3,8 @@
 ###########################################################
 # Script: player_check.py
 # Author: John Vasconcelos
-# Date: 9/15/16
-# Version 1.0
+# Date: 10/17/16
+# Version 2.0
 ###########################################################
 
 import pprint
