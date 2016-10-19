@@ -62,7 +62,9 @@ optype_list = {
     '-32767':'Prepare Status',
     '-32768':'Play Status',
     '-12279':'UMP Select',
-    '257':'Splice Request'}
+    '257':'Splice Request',
+    '1':'INIT Request',
+    '2':'INIT Response'}
 
 
 def UTCFromGps(gpsWeek, SOW, leapSecs=14):
@@ -263,12 +265,30 @@ for line in f_in:
 
 
     if 'UmpPrepareStatusMessage' in line or 'UmpPlayStatusMessage' in line:
-        (log_date,log_time,junk1,junk2,junk3,junk4,junk5,junk6,log_msg) = line.split()
-        op_type = get_logdata(line.split('{"opID":'))
-        seq_num = get_logdata(line.split('"seqNum":'))
-        dpi_pid = get_logdata(line.split('"dpiPidIndex":'))
-        status_type = get_logdata(line.split('"statusType":'))
-        error_code_id = get_logdata(line.split('"errorCode":'))
+
+        log_date = line.split()[0]
+
+        log_time = line.split()[1]
+
+        if 'UmpPrepareStatusMessage' in line:
+            str_msg = line.split('UmpPrepareStatusMessage ')
+        else:
+            str_msg = line.split('UmpPlayStatusMessage ')
+        
+
+        str_dict = json.loads(str_msg[1])
+
+        #Loads the Op Type into the variable.
+        op_id = str(str_dict['opID'])
+        if op_id in optype_list:
+            op_type = optype_list[op_id]
+        else:
+            op_type = op_id
+
+        dpi_pid = str_dict['data']['dpiPidIndex']
+        seq_num = str_dict['data']['seqNum']
+        status_type = str_dict['data']['statusType']
+        error_code_id = str(str_dict['data']['errorCode'])
         error_code = error_list[error_code_id.strip()]
         print '%-12s %-15s %-15s %-8s %-6s %-7s %-8s %-12s' %(log_date,log_time,op_type,seq_num,'',dpi_pid,status_type,error_code)
 
