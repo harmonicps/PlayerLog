@@ -7,11 +7,12 @@
 # Version 2.0
 ###########################################################
 
-import pprint
+from pprint import pprint
 import os
 import sys, getopt
 from datetime import datetime, timedelta
 import time, math
+import json
 
 secsInWeek = 604800
 secsInDay = 86400
@@ -54,6 +55,16 @@ resp_code_list = {
     '122':'Splice Request Late',
     '124':'Unknow Error'}
 
+optype_list = {
+    '-12278':'Prepare',
+    '-12287':'Play Request',
+    '-12276':'Prepare Cancel',
+    '-32767':'Prepare Status',
+    '-32768':'Play Status',
+    '-12279':'UMP Select',
+    '257':'Splice Request'}
+
+
 def UTCFromGps(gpsWeek, SOW, leapSecs=14):
     """converts gps week and seconds to UTC
 
@@ -77,6 +88,9 @@ def UTCFromGps(gpsWeek, SOW, leapSecs=14):
 
 
 def get_logdata(message):
+    '''
+    Extracts the needed output to be loaded into the print variables
+    '''
     logdata_ret = ""
     
     log_line = message[1].split(",")
@@ -105,6 +119,59 @@ def get_logdata(message):
     	logdata_ret = log_extract
     return logdata_ret
 
+def get_multipleop(dict_log,op_id,dict_key):
+
+    '''
+    Extracts the log from the dictionary
+    '''
+    ret_value = ''
+
+    # Get log info for a Play Request
+    if op_id == '-12287':
+        if dict_key == 'seqNum':
+            ret_value = dict_log['operations'][0]['data']['clips'][0]['seqNum']
+        elif dict_key == 'eventId':
+            ret_value = dict_log['operations'][0]['data']['clips'][0]['eventId']
+        elif dict_key == 'duration':
+            ret_value = dict_log['operations'][0]['data']['clips'][0]['duration']['contents']
+        elif dict_key == 'som':
+            ret_value = dict_log['operations'][0]['data']['clips'][0]['som']['contents']
+        elif dict_key == 'clipType':
+            ret_value = dict_log['operations'][0]['data']['clips'][0]['clipType']
+        elif dict_key == 'materialId':
+            ret_value = dict_log['operations'][0]['data']['clips'][0]['materialId']['contents']
+
+    # Get log info for a Prepare Command
+    elif op_id == '-12278':
+        if dict_key == 'seqNum':
+            ret_value = dict_log['operations'][0]['data']['clipInfo'][0]['seqNum']
+        elif dict_key == 'eventId':
+            ret_value = dict_log['operations'][0]['data']['clipInfo'][0]['eventId']
+        elif dict_key == 'duration':
+            ret_value = dict_log['operations'][0]['data']['clipInfo'][0]['duration']['contents']
+        elif dict_key == 'som':
+            ret_value = dict_log['operations'][0]['data']['clipInfo'][0]['som']['contents']
+        elif dict_key == 'materialId':
+            ret_value = dict_log['operations'][0]['data']['clipInfo'][0]['materialId']['contents']
+
+    # Get log info for a UMP Select Command
+    elif op_id == '-12279':
+        if dict_key == 'seqNum':
+            ret_value = dict_log['operations'][0]['data']['seqNum']
+        elif dict_key == 'inputId':
+            ret_value = dict_log['operations'][0]['data']['inputId']['contents']
+
+    # Get log info for a Prepare Cancel Command
+    elif op_id == '-12276':
+        if dict_key == 'seqNum':
+            ret_value = dict_log['operations'][0]['data']['seqNum']
+
+    else:
+        ret_value = 'N/A'
+
+    return ret_value
+
+ 
 def main(argv):    
     global player_log_file
     global dpi_pid_filter
@@ -120,10 +187,11 @@ def main(argv):
         elif opt in ("-i", "--ifile"):
             player_log_file = arg
         elif opt in ("-d", "--dpipid"):
-            dpi_pid_filter = arg         
+            dpi_pid_filter = arg        
 
 if __name__ == "__main__":
    main(sys.argv[1:])
+
 
 if os.path.isfile(player_log_file): 
     f_in = open(player_log_file,"rb")
@@ -148,34 +216,51 @@ for line in f_in:
 
         if int(dpi_pid_filter) is not int(dpi_pid):
             continue
+
     
     #Use the print command below to troubleshoot any parsing issues
     #print line
     
     if 'SCTE104MultipleOperationMessage' in line:
-        (log_date,log_time,junk1,junk2,junk3,junk4,junk5,junk6,log_msg) = line.split()
-        op_type = get_logdata(line.split('"operations":[{"opID":'))
-        dpi_pid = get_logdata(line.split('"dpiPidIndex":'))
+        
+        log_date = line.split()[0]
+
+        log_time = line.split()[1]
+
+        str_msg = line.split('SCTE104MultipleOperationMessage ')
+
+        str_dict = json.loads(str_msg[1])
+
+        dpi_pid = str_dict['dpiPidIndex']
+
+        #Loads the Op Type into the variable.
+        op_id = str(str_dict['operations'][0]['opID'])
+        if op_id in optype_list:
+            op_type = optype_list[op_id]
+        else:
+            op_type = op_id
         
         if '"seqNum":' in line:
-            seq_num = get_logdata(line.split('"seqNum":'))
-        if op_type == "Play Request":
-            event_id = get_logdata(line.split('"eventId":'))
+            seq_num = get_multipleop(str_dict,op_id,'seqNum')
+        if '"eventId":' in line:
+            event_id = get_multipleop(str_dict,op_id,'eventId')    
         if '"materialId":{"contents":' in line:
-            material_id = get_logdata(line.split('"materialId":{"contents":'))
+            material_id = get_multipleop(str_dict,op_id,'materialId')
         if '"inputId":{"contents":' in line:
-            material_id = get_logdata(line.split('"inputId":{"contents":'))
+            material_id = get_multipleop(str_dict,op_id,'inputId')
         if '"duration":{"contents":' in line:
-            clip_dur = get_logdata(line.split('"duration":{"contents":'))
+            clip_dur = get_multipleop(str_dict,op_id,'duration')
         if '"som":{"contents":' in line:
-            clip_som = get_logdata(line.split('"som":{"contents":'))
+            clip_som = get_multipleop(str_dict,op_id,'som')
         if '"clipType":' in line:
-            clip_type_id = get_logdata(line.split('"clipType":'))
-            clip_type = clip_type_list[clip_type_id.strip()]
+            clip_type_id = str(get_multipleop(str_dict,op_id,'clipType'))
+            clip_type = clip_type_list[clip_type_id]
         if '"utcSeconds":' in line:
-            start_time_gps = get_logdata(line.split('"utcSeconds":'))
+            start_time_gps = str_dict['timestamp']['utcSeconds']
             start_time = UTCFromGps(0,int(start_time_gps))
+        
         print '%-12s %-15s %-15s %-8s %-6s %-7s %-8s %-12s %-14s %-14s %-12s %-17s %-20s' %(log_date,log_time,op_type,seq_num,event_id,dpi_pid,'','',clip_dur,clip_som,clip_type,start_time,material_id)
+
 
     if 'UmpPrepareStatusMessage' in line or 'UmpPlayStatusMessage' in line:
         (log_date,log_time,junk1,junk2,junk3,junk4,junk5,junk6,log_msg) = line.split()
