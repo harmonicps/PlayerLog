@@ -12,6 +12,7 @@ import os
 import sys, getopt
 from datetime import datetime, timedelta
 import time, math
+import socket
 import json
 
 secsInWeek = 604800
@@ -19,6 +20,7 @@ secsInDay = 86400
 gpsEpoch = (1980, 1, 6, 0, 0, 0)  # (year, month, day, hh, mm, ss)
 player_log_file = "PlayerControlAdapter.log"
 dpi_pid_filter = ""
+host_name = socket.gethostname()
 
 # Error List from ICD
 error_list = {
@@ -62,6 +64,9 @@ optype_list = {
     '-32767':'Prepare Status',
     '-32768':'Play Status',
     '-12279':'UMP Select',
+    '-12280':'UMP Stop',
+    '-12281':'Insert Template',
+    '-12283':'Insert Graphic',
     '257':'Splice Request',
     '1':'INIT Request',
     '2':'INIT Response'}
@@ -162,6 +167,21 @@ def get_multipleop(dict_log,op_id,dict_key):
             ret_value = dict_log['operations'][0]['data']['seqNum']
         elif dict_key == 'inputId':
             ret_value = dict_log['operations'][0]['data']['inputId']['contents']
+    
+    # Get log info for a UMP Insert Template or Insert Graphic or UMP Stop
+    elif (op_id) == '-12281' or '-12283' or '-12280':
+        if dict_key == 'seqNum':
+            ret_value = dict_log['operations'][0]['data']['seqNum']
+        elif dict_key == 'duration':
+            ret_value = dict_log['operations'][0]['data']['duration']['contents']
+        elif dict_key == 'eventId':
+            ret_value = dict_log['operations'][0]['data']['eventId']
+        elif dict_key == 'materialId':
+            ret_value = dict_log['operations'][0]['data']['materialId']['contents']
+        elif dict_key == 'layer':
+            ret_value = dict_log['operations'][0]['data']['layer']
+
+
 
     # Get log info for a Prepare Cancel Command
     elif op_id == '-12276':
@@ -202,8 +222,17 @@ else:
     sys.exit(2)
 
 # Print Header
+print '\n\n'
+print '*' * 40
+print 'Processing {} for Encoder:'.format(player_log_file)
+print host_name
+print '*' * 40
+print '\n'
+
 print '%-12s %-15s %-15s %-8s %-6s %-7s %-8s %-12s %-14s %-14s %-12s %-17s %-20s' %("DATE" , "TIME" , "OPERATION" , "SEQ_NUM" , "EVENT" ,"DPI_PID" , "STATUS" , 'ERROR_CODE' , 'DURATION' , 'SOM' , 'CLIP_TYPE' , 'START_TIME' , 'MATERIAL ID')
 
+
+# Check Logfile Line by Line
 for line in f_in:
     event_id = ""
     clip_type = ""
@@ -236,11 +265,12 @@ for line in f_in:
         dpi_pid = str_dict['dpiPidIndex']
 
         #Loads the Op Type into the variable.
-        op_id = str(str_dict['operations'][0]['opID'])
-        if op_id in optype_list:
-            op_type = optype_list[op_id]
-        else:
-            op_type = op_id
+        if '"opID":' in line:
+            op_id = str(str_dict['operations'][0]['opID'])
+            if op_id in optype_list:
+                op_type = optype_list[op_id]
+            else:
+                op_type = op_id
         
         if '"seqNum":' in line:
             seq_num = get_multipleop(str_dict,op_id,'seqNum')
@@ -254,6 +284,8 @@ for line in f_in:
             clip_dur = get_multipleop(str_dict,op_id,'duration')
         if '"som":{"contents":' in line:
             clip_som = get_multipleop(str_dict,op_id,'som')
+        if '"layer":' in line:
+            clip_type = 'Layer %s' %get_multipleop(str_dict,op_id,'layer')
         if '"clipType":' in line:
             clip_type_id = str(get_multipleop(str_dict,op_id,'clipType'))
             clip_type = clip_type_list[clip_type_id]
