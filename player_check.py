@@ -21,6 +21,8 @@ gpsEpoch = (1980, 1, 6, 0, 0, 0)  # (year, month, day, hh, mm, ss)
 player_log_file = "PlayerControlAdapter.log"
 dpi_pid_filter = ""
 host_name = socket.gethostname()
+is_error_only = False
+opl_list = []
 
 # Error List from ICD
 error_list = {
@@ -71,6 +73,17 @@ optype_list = {
     '1':'INIT Request',
     '2':'INIT Response'}
 
+# Clip Type List from ICD
+play_status_list = {
+    1:'Start',
+    2:'End',
+    3:'ERROR'}
+
+# Clip Type List from ICD
+prep_status_list = {
+    1:'Prepared',
+    2:'Cancel',
+    3:'ERROR'}
 
 def UTCFromGps(gpsWeek, SOW, leapSecs=14):
     """converts gps week and seconds to UTC
@@ -167,6 +180,8 @@ def get_multipleop(dict_log,op_id,dict_key):
             ret_value = dict_log['operations'][0]['data']['seqNum']
         elif dict_key == 'inputId':
             ret_value = dict_log['operations'][0]['data']['inputId']['contents']
+        elif dict_key == 'eventId':
+            ret_value = dict_log['operations'][0]['data']['eventId']        
     
     # Get log info for a UMP Insert Template or Insert Graphic or UMP Stop
     elif (op_id) == '-12281' or '-12283' or '-12280':
@@ -181,8 +196,6 @@ def get_multipleop(dict_log,op_id,dict_key):
         elif dict_key == 'layer':
             ret_value = dict_log['operations'][0]['data']['layer']
 
-
-
     # Get log info for a Prepare Cancel Command
     elif op_id == '-12276':
         if dict_key == 'seqNum':
@@ -193,26 +206,42 @@ def get_multipleop(dict_log,op_id,dict_key):
 
     return ret_value
 
+def opl_parse(file):
+    if os.path.isfile(file):
+        f_in = open(file,"rb")
+
+    for line in f_in:
+        if '# Channel Id:' in line:
+            ch_id = str(line.split('# Channel Id: Channel ')[1])
+
  
 def main(argv):    
     global player_log_file
     global dpi_pid_filter
+    global is_error_only
     try:
-        opts, args = getopt.getopt(argv,"hi:d:",["ifile=","dpipid="])
+        opts, args = getopt.getopt(argv,"hef:d:",["ifile=","dpipid="])
     except getopt.GetoptError:
-        print 'player_check.py -i <PlayerLog File> -d <DPI PID>'
+        print 'player_check.py -f <PlayerLog File> -d <DPI PID> -e [show errors only]'
         sys.exit(2)
     for opt, arg in opts:
         if opt == '-h':
-            print 'player_check.py -i <PlayerLog File> -d <DPI PID>'
+            print 'player_check.py -f <PlayerLog File> -d <DPI PID> -e [show errors only]'
             sys.exit()
-        elif opt in ("-i", "--ifile"):
+        elif opt in ("-f", "--ifile"):
             player_log_file = arg
         elif opt in ("-d", "--dpipid"):
             dpi_pid_filter = arg        
+        if opt == '-e':
+            is_error_only = True
 
 if __name__ == "__main__":
    main(sys.argv[1:])
+
+# Get list of Channel ID DPI PID and Channel Name
+for opl_file in os.listdir("."):
+    if file.endswith(".opl"):
+        opl_list.append(opl_parse(file))
 
 
 if os.path.isfile(player_log_file): 
@@ -225,11 +254,11 @@ else:
 print '\n\n'
 print '*' * 40
 print 'Processing {} for Encoder:'.format(player_log_file)
-print host_name
+print '{:>20}'.format(host_name)
 print '*' * 40
 print '\n'
 
-print '%-12s %-15s %-15s %-8s %-6s %-7s %-8s %-12s %-14s %-14s %-12s %-17s %-20s' %("DATE" , "TIME" , "OPERATION" , "SEQ_NUM" , "EVENT" ,"DPI_PID" , "STATUS" , 'ERROR_CODE' , 'DURATION' , 'SOM' , 'CLIP_TYPE' , 'START_TIME' , 'MATERIAL ID')
+print '%-12s %-15s %-15s %-8s %-6s %-7s %-8s %-12s %-14s %-14s %-12s %-17s %-20s' %("DATE" , "TIME" , "OPERATION" , "SEQ_NUM" , "EVENT" ,"DPI_PID" , "STATUS" , 'ERROR' , 'DURATION' , 'SOM' , 'CLIP_TYPE' , 'START_TIME' , 'MATERIAL ID')
 
 
 # Check Logfile Line by Line
@@ -293,7 +322,8 @@ for line in f_in:
             start_time_gps = str_dict['timestamp']['utcSeconds']
             start_time = UTCFromGps(0,int(start_time_gps))
         
-        print '%-12s %-15s %-15s %-8s %-6s %-7s %-8s %-12s %-14s %-14s %-12s %-17s %-20s' %(log_date,log_time,op_type,seq_num,event_id,dpi_pid,'','',clip_dur,clip_som,clip_type,start_time,material_id)
+        if not is_error_only:
+            print '%-12s %-15s %-15s %-8s %-6s %-7s %-8s %-12s %-14s %-14s %-12s %-17s %-20s' %(log_date,log_time,op_type,seq_num,event_id,dpi_pid,'','',clip_dur,clip_som,clip_type,start_time,material_id)
 
 
     if 'UmpPrepareStatusMessage' in line or 'UmpPlayStatusMessage' in line:
@@ -319,10 +349,26 @@ for line in f_in:
 
         dpi_pid = str_dict['data']['dpiPidIndex']
         seq_num = str_dict['data']['seqNum']
-        status_type = str_dict['data']['statusType']
+        status_id = str_dict['data']['statusType']
+        
+        if op_id == '-32768':
+            status_type = play_status_list[status_id]
+        elif op_id == '-32767':
+            status_type = prep_status_list[status_id]
+        else:
+            status_type = status_id
+
         error_code_id = str(str_dict['data']['errorCode'])
         error_code = error_list[error_code_id.strip()]
-        print '%-12s %-15s %-15s %-8s %-6s %-7s %-8s %-12s' %(log_date,log_time,op_type,seq_num,'',dpi_pid,status_type,error_code)
+
+        if '"eventId":' in line:
+            event_id = str_dict['data']['eventId']
+
+        if is_error_only:
+            if status_type == 'ERROR':
+               print '%-12s %-15s %-15s %-8s %-6s %-7s %-8s %-12s' %(log_date,log_time,op_type,seq_num,event_id,dpi_pid,status_type,error_code)
+        else:
+            print '%-12s %-15s %-15s %-8s %-6s %-7s %-8s %-12s' %(log_date,log_time,op_type,seq_num,event_id,dpi_pid,status_type,error_code)
 
     if 'SCTE104InitRequestMessage' in line:
         (log_date,log_time,junk1,junk2,junk3,junk4,junk5,junk6,log_msg) = line.split()
@@ -343,8 +389,23 @@ for line in f_in:
         result_id = get_logdata(line.split('"result":'))
         if '100' not in result_id:
             op_type = 'INJECT Response'
+            status_type = "ERROR"
             dpi_pid = get_logdata(line.split('"dpiPidIndex":'))
             result_msg = resp_code_list[result_id]
-            print '%-12s %-15s %-15s %-8s %-6s %-7s %-8s %-12s' %(log_date,log_time,op_type,'','',dpi_pid,'',result_msg)
+            print '%-12s %-15s %-15s %-8s %-6s %-7s %-8s %-12s' %(log_date,log_time,op_type,'','',dpi_pid,status_type,result_msg)
+
+    if 'not equal hostname' in line:
+        
+        log_date = line.split()[0]
+
+        log_time = line.split()[1]
+
+        result_msg = line.split('  - ')[1]
+
+        status_type = "ERROR"
+
+        print '%-12s %-15s %-15s %-8s %-6s %-7s %-8s %-12s' %(log_date,log_time, "Prepare" ,"", "","",status_type,result_msg)
+
+
 
 f_in.close()
