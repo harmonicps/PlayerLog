@@ -4,7 +4,7 @@
 # Script: player_check.py
 # Author: John Vasconcelos
 # Date: 10/17/16
-# Version 2.0
+# Version 2.1
 ###########################################################
 
 from pprint import pprint
@@ -23,6 +23,7 @@ dpi_pid_filter = ""
 host_name = socket.gethostname()
 is_error_only = False
 opl_list = []
+opl_temp_list = []
 
 # Error List from ICD
 error_list = {
@@ -206,13 +207,31 @@ def get_multipleop(dict_log,op_id,dict_key):
 
     return ret_value
 
+
 def opl_parse(file):
+    ch_dpi =""
     if os.path.isfile(file):
         f_in = open(file,"rb")
 
     for line in f_in:
+        
+        if 'DpiPidIndexList =' in line:
+            ch_dpi_line = line.split('DpiPidIndexList = ')[1]
+            ch_dpi = ch_dpi_line.split(',')[0].strip('"')
+        
         if '# Channel Id:' in line:
             ch_id = str(line.split('# Channel Id: Channel ')[1])
+            #opl_list.append(ch_id.strip())
+        
+        if '# Channel Name:' in line:
+            ch_name = line.split('# Channel Name: ')[1]
+            #opl_list.append(ch_name.strip())
+
+    if not ch_dpi == '':
+        opl_list = [ch_dpi,'Channel ' + ch_id.strip(),ch_name.strip()]
+        
+    if 'opl_list' in vars() :
+        return opl_list 
 
  
 def main(argv):    
@@ -240,8 +259,10 @@ if __name__ == "__main__":
 
 # Get list of Channel ID DPI PID and Channel Name
 for opl_file in os.listdir("."):
-    if file.endswith(".opl"):
-        opl_list.append(opl_parse(file))
+    if opl_file.endswith(".opl"):
+        opl_temp_list = opl_parse(opl_file)
+        if opl_temp_list: 
+           opl_list.append(opl_temp_list)
 
 
 if os.path.isfile(player_log_file): 
@@ -274,7 +295,7 @@ for line in f_in:
     if dpi_pid_filter and '"dpiPidIndex":' in line:
     	dpi_pid = get_logdata(line.split('"dpiPidIndex":'))
 
-        if int(dpi_pid_filter) is not int(dpi_pid):
+        if int(dpi_pid_filter) <> int(dpi_pid):
             continue
 
     
