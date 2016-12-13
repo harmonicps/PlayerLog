@@ -70,6 +70,7 @@ optype_list = {
     '-12280':'UMP Stop',
     '-12281':'Insert Template',
     '-12283':'Insert Graphic',
+    '-12284':'Insert Still',
     '257':'Splice Request',
     '1':'INIT Request',
     '2':'INIT Response'}
@@ -302,7 +303,7 @@ for line in f_in:
     #Use the print command below to troubleshoot any parsing issues
     #print line
     
-    if 'SCTE104MultipleOperationMessage' in line:
+    if 'SCTE104MultipleOperationMessage ' in line:
         
         log_date = line.split()[0]
 
