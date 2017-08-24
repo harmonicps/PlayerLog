@@ -87,7 +87,7 @@ prep_status_list = {
     2:'Cancel',
     3:'ERROR'}
 
-def UTCFromGps(gpsWeek, SOW, leapSecs=14):
+def UTCFromGps(gpsWeek, SOW, leapSecs=17):
     """converts gps week and seconds to UTC
 
     see comments of inverse function!
